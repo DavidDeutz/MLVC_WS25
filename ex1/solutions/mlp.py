@@ -47,7 +47,10 @@ class SquareLoss(object):
             Squared error for each element of the prediction.
         """
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        y_true = np.asarray(y_true, dtype=np.float64)
+        y_pred = np.asarray(y_pred, dtype=np.float64)
+        diff = y_pred - y_true             # difference between predicted and target
+        return 0.5 * diff**2               # mean squared error (per element)
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     def delta(self, y_true, y_pred):
@@ -73,7 +76,9 @@ class SquareLoss(object):
             Gradient of the loss with respect to `y_pred`.
         """
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        y_true = np.asarray(y_true, dtype=np.float64)
+        y_pred = np.asarray(y_pred, dtype=np.float64)
+        return y_pred - y_true             # derivative of 0.5*(y_pred - y_true)^2 wrt y_pred
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     def calculate_accuracy(self, y_true, y_pred):
@@ -120,7 +125,8 @@ def sigmoid(x: np.ndarray) -> np.ndarray:
         been transformed by sigma(x).
     """
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    x = np.asarray(x, dtype=np.float64)
+    return 1.0 / (1.0 + np.exp(-x))        # logistic function
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
 def dsigmoid(a: np.ndarray) -> np.ndarray:
@@ -144,7 +150,8 @@ def dsigmoid(a: np.ndarray) -> np.ndarray:
         Array of the same shape as `a`, containing the derivative values.
     """
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    a = np.asarray(a, dtype=np.float64)
+    return a * (1.0 - a)                   # derivative using output a = sigmoid(x)
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
 def tanh(x: np.ndarray) -> np.ndarray:
@@ -190,7 +197,11 @@ def fc_forward(a, layer):
         Contains values needed for backward pass (e.g. input vector).
     """
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    x = np.asarray(a, dtype=np.float64)     # input activations
+    W = layer["W"]
+    b = layer["b"]
+    z = x @ W + b                           # linear transformation
+    cache = {"x": x}                        # store input for backward
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return z, cache
@@ -228,7 +239,14 @@ def fc_backward(grad, layer, cache, lr):
     W = layer["W"]                               # (in_dim, out_dim)
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    g = np.asarray(grad, dtype=np.float64)  # gradient from upper layer
+    dW = np.outer(x, g)                     # grad wrt weights
+    db = g                                  # grad wrt bias
+    grad_prev = g @ W.T                     # grad wrt previous activation
+
+    # SGD parameter update
+    layer["W"] = W - lr * dW
+    layer["b"] = layer["b"] - lr * db
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return grad_prev
@@ -259,7 +277,9 @@ def act_forward(a, func, dfunc):
     """
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    a = np.asarray(a, dtype=np.float64)
+    out = func(a)                           # apply activation
+    cache = {"dfunc": dfunc, "a": out}      # store activation for backward
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return out, cache
@@ -286,7 +306,10 @@ def act_backward(grad, cache):
     """
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    g = np.asarray(grad, dtype=np.float64)  # upstream gradient
+    dfunc = cache["dfunc"]
+    a_out = cache["a"]
+    grad_out = g * dfunc(a_out)             # elementwise multiplication
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return grad_out
