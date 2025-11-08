@@ -192,7 +192,29 @@ def _conv2d_forward(x, W, b, stride=1, pad=0):
     C_out, C_in, k, _ = W.shape
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    ## First we pad the input and turn it into columns
+    xp, pad_cfg = _pad2d(x, pad)
+    cols, idx, H_out, W_out = _im2col_from_padded(xp, k, stride)
+
+    ## Now we reshape the filters and compute the convolution 
+    W_row = W.reshape(C_out, C_in * k * k)
+    out_cols = W_row @ cols + b.reshape(-1, 1)
+
+    out = out_cols.reshape(C_out, H_out, W_out)
+
+    cache = {
+        "x_shape": x.shape,
+        "W": W,
+        "b": b,
+        "stride": stride,
+        "pad": pad,
+        "xp_shape": xp.shape,
+        "cols": cols,
+        "idx": idx,
+        "H_out": H_out,
+        "W_out": W_out
+    }
+
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return out, cache
