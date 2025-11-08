@@ -273,7 +273,25 @@ def _conv2d_backward(dout, cache):
     idx = cache["idx"]
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    H_out = cache["H_out"]
+    W_out = cache["W_out"]
+    C_out, C_in, k, _ = W.shape
+
+    dout_mat = dout.reshape(C_out, H_out * W_out)
+    db = dout_mat.sum(axis=1)
+
+    dW_row = dout_mat @ cols.T
+    dW = dW_row.reshape(C_out, C_in, k, k)
+
+    W_row = W.reshape(C_out, C_in * k * k)
+    dcols = W_row.T @ dout_mat
+
+    dxp = _col2im_into_padded(dcols, xp_shape, idx)
+    if pad == 0:
+        dx = dxp
+    else:
+        _, H, W_in = x_shape
+        dx = dxp[:, pad:pad+H, pad:pad+W_in]
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return dx.astype(np.float64), dW.astype(np.float64), db.astype(np.float64)
