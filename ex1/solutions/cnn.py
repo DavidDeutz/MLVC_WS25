@@ -408,7 +408,21 @@ def _maxpool2d_backward(dout, cache):
     W_out = cache["W_out"]
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    k2 = kernel * kernel
+    Npos = H_out * W_out
+    grad_cols = np.zeros((C * k2, Npos), dtype=np.float64)
+
+    row_base = (np.arange(C) * k2).reshape(C, 1)
+    rows = (row_base + max_idx).reshape(-1)
+
+    cols_idx = np.tile(np.arange(Npos), C)
+
+    vals = dout.reshape(C, Npos).reshape(-1)
+
+    grad_cols[rows, cols_idx] = vals
+
+    i2, j2, c2, _, _ = _get_im2col_indices(C, H, W, kernel, stride)
+    dx = _col2im_into_padded(grad_cols, (C, H, W), (i2, j2, c2))
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return dx.astype(np.float64)
