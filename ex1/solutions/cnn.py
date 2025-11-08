@@ -340,7 +340,25 @@ def _maxpool2d_forward(x, kernel=2, stride=2):
     C, H, W = x.shape
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    cols, idx, H_out, W_out = _im2col_from_padded(x, kernel, stride)
+
+    k2 = kernel * kernel
+    cols_ch = cols.reshape(C, k2, H_out * W_out)
+
+    max_vals = cols_ch.max(axis=1)
+    max_idx = cols_ch.argmax(axis=1)
+
+    out = max_vals.reshape(C, H_out, W_out)
+
+    cache = {
+        "x_shape": x.shape,
+        "kernel": kernel,
+        "stride": stride,
+        "idx": idx,
+        "max_idx": max_idx,
+        "H_out": H_out,
+        "W_out": W_out
+    }
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return out.astype(np.float64), cache
