@@ -437,20 +437,31 @@ def _maxpool2d_backward(dout, cache):
     W_out = cache["W_out"]
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
+    ## number of elements per pooling window
     k2 = kernel * kernel
-    Npos = H_out * W_out
-    grad_cols = np.zeros((C * k2, Npos), dtype=np.float64)
 
+    ## we initialize a gradient matrix in column format like in im2col
+    grad_cols = np.zeros((C * k2, H_out * W_out), dtype=np.float64)
+
+    ## now we compute the row indices where for grad_cols for each channel where the max positions are located aka the start of each channel's block 
     row_base = (np.arange(C) * k2).reshape(C, 1)
+
+    ## now we add the max indices to get the final row indices inside grad_cols
     rows = (row_base + max_idx).reshape(-1)
 
-    cols_idx = np.tile(np.arange(Npos), C)
+    ## We build the column indices for grad_cols
+    cols_idx = np.tile(np.arange(H_out * W_out), C)
 
-    vals = dout.reshape(C, Npos).reshape(-1)
+    ## Flatten dout into vectore by channel and then spatial location
+    vals = dout.reshape(C, H_out * W_out).reshape(-1)
 
+    ## Write each gradient value into the correct position inside grad_cols
     grad_cols[rows, cols_idx] = vals
 
+    ## now we can convert the grad_cols back into the padded image format by getting the indices again
     i2, j2, c2, _, _ = _get_im2col_indices(C, H, W, kernel, stride)
+
+    ## Converts the gradient matrix back into tensor using the indices
     dx = _col2im_into_padded(grad_cols, (C, H, W), (i2, j2, c2))
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
