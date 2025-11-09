@@ -279,20 +279,35 @@ def _conv2d_backward(dout, cache):
     idx = cache["idx"]
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
+    ## extract more cached values and shapes
     H_out = cache["H_out"]
     W_out = cache["W_out"]
     C_out, C_in, k, _ = W.shape
 
+    ## reshape dout into a matrix where each row is one output channel and each column is one output position
+    ## This is we need to vectorize the computations
+    ## This matches the matrix layout we had in the forward pass
     dout_mat = dout.reshape(C_out, H_out * W_out)
+
+    ## This is for the bias gradient: we just need to sum all upstream gradients for each output channel
     db = dout_mat.sum(axis=1)
 
+    ## This is for the weight gradient: we multiply dout_mat with the input columns with matrix multiplication
     dW_row = dout_mat @ cols.T
+
+    ## Reshape back to the original weight shape
     dW = dW_row.reshape(C_out, C_in, k, k)
 
+    ## Flatten each filter into a row vector again for input gradient computation like in forward pass
     W_row = W.reshape(C_out, C_in * k * k)
+
+    ## Now we compute the gradient 
     dcols = W_row.T @ dout_mat
 
+    ## now we add the gradients back to the padded input positions
     dxp = _col2im_into_padded(dcols, xp_shape, idx)
+
+    ## finally we remove the padding to get dx with the same shape as the original input x
     if pad == 0:
         dx = dxp
     else:
