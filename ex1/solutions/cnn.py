@@ -192,7 +192,35 @@ def _conv2d_forward(x, W, b, stride=1, pad=0):
     C_out, C_in, k, _ = W.shape
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    ## First we pad the input and turn it into columns
+    xp, pad_cfg = _pad2d(x, pad)
+
+    ## Now we extract sliding local blocks into columns
+    cols, idx, H_out, W_out = _im2col_from_padded(xp, k, stride)
+
+    ## Now we reshape the filters into single row vectors, so that all filters form a matrix that can be used for multiplication
+    W_row = W.reshape(C_out, C_in * k * k)
+
+    ## Now we can perform the convolution as a matrix multiplication with bias addition
+    out_cols = W_row @ cols + b.reshape(-1, 1)
+
+    ## Finally we reshape the output columns into the output feature map or tensor
+    out = out_cols.reshape(C_out, H_out, W_out)
+
+    ## And cache everything needed for backward pass
+    cache = {
+        "x_shape": x.shape,
+        "W": W,
+        "b": b,
+        "stride": stride,
+        "pad": pad,
+        "xp_shape": xp.shape,
+        "cols": cols,
+        "idx": idx,
+        "H_out": H_out,
+        "W_out": W_out
+    }
+
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return out, cache
@@ -251,7 +279,40 @@ def _conv2d_backward(dout, cache):
     idx = cache["idx"]
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    ## extract more cached values and shapes
+    H_out = cache["H_out"]
+    W_out = cache["W_out"]
+    C_out, C_in, k, _ = W.shape
+
+    ## reshape dout into a matrix where each row is one output channel and each column is one output position
+    ## This is we need to vectorize the computations
+    ## This matches the matrix layout we had in the forward pass
+    dout_mat = dout.reshape(C_out, H_out * W_out)
+
+    ## This is for the bias gradient: we just need to sum all upstream gradients for each output channel
+    db = dout_mat.sum(axis=1)
+
+    ## This is for the weight gradient: we multiply dout_mat with the input columns with matrix multiplication
+    dW_row = dout_mat @ cols.T
+
+    ## Reshape back to the original weight shape
+    dW = dW_row.reshape(C_out, C_in, k, k)
+
+    ## Flatten each filter into a row vector again for input gradient computation like in forward pass
+    W_row = W.reshape(C_out, C_in * k * k)
+
+    ## Now we compute the gradient 
+    dcols = W_row.T @ dout_mat
+
+    ## now we add the gradients back to the padded input positions
+    dxp = _col2im_into_padded(dcols, xp_shape, idx)
+
+    ## finally we remove the padding to get dx with the same shape as the original input x
+    if pad == 0:
+        dx = dxp
+    else:
+        _, H, W_in = x_shape
+        dx = dxp[:, pad:pad+H, pad:pad+W_in]
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return dx.astype(np.float64), dW.astype(np.float64), db.astype(np.float64)
@@ -300,7 +361,33 @@ def _maxpool2d_forward(x, kernel=2, stride=2):
     C, H, W = x.shape
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    ##  First we turn the input into columns
+    cols, idx, H_out, W_out = _im2col_from_padded(x, kernel, stride)
+
+    ## We compute the number of elements per pooling window
+    k2 = kernel * kernel
+
+    ## For each channel c, cols_ch[c] is a Matrix of shape (k2, H_out*W_out). Every column is one pooling window and the k2 rows are the elements inside that window.
+    ## This is needed to vectorize the max operation over each window
+    cols_ch = cols.reshape(C, k2, H_out * W_out)
+
+    ## Now we can compute the max over each window (aka column because we vectorized the windows)
+    max_vals = cols_ch.max(axis=1)
+    ## And we store which index corresponds to the max value inside each window for backward pass
+    max_idx = cols_ch.argmax(axis=1)
+
+    ## Finally we reshape the max values into the output feature map
+    out = max_vals.reshape(C, H_out, W_out)
+
+    cache = {
+        "x_shape": x.shape,
+        "kernel": kernel,
+        "stride": stride,
+        "idx": idx,
+        "max_idx": max_idx,
+        "H_out": H_out,
+        "W_out": W_out
+    }
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return out.astype(np.float64), cache
@@ -350,7 +437,32 @@ def _maxpool2d_backward(dout, cache):
     W_out = cache["W_out"]
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    ## number of elements per pooling window
+    k2 = kernel * kernel
+
+    ## we initialize a gradient matrix in column format like in im2col
+    grad_cols = np.zeros((C * k2, H_out * W_out), dtype=np.float64)
+
+    ## now we compute the row indices where for grad_cols for each channel where the max positions are located aka the start of each channel's block 
+    row_base = (np.arange(C) * k2).reshape(C, 1)
+
+    ## now we add the max indices to get the final row indices inside grad_cols
+    rows = (row_base + max_idx).reshape(-1)
+
+    ## We build the column indices for grad_cols
+    cols_idx = np.tile(np.arange(H_out * W_out), C)
+
+    ## Flatten dout into vectore by channel and then spatial location
+    vals = dout.reshape(C, H_out * W_out).reshape(-1)
+
+    ## Write each gradient value into the correct position inside grad_cols
+    grad_cols[rows, cols_idx] = vals
+
+    ## now we can convert the grad_cols back into the padded image format by getting the indices again
+    i2, j2, c2, _, _ = _get_im2col_indices(C, H, W, kernel, stride)
+
+    ## Converts the gradient matrix back into tensor using the indices
+    dx = _col2im_into_padded(grad_cols, (C, H, W), (i2, j2, c2))
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return dx.astype(np.float64)
