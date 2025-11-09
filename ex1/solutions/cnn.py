@@ -346,14 +346,22 @@ def _maxpool2d_forward(x, kernel=2, stride=2):
     C, H, W = x.shape
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
+    ##  First we turn the input into columns
     cols, idx, H_out, W_out = _im2col_from_padded(x, kernel, stride)
 
+    ## We compute the number of elements per pooling window
     k2 = kernel * kernel
+
+    ## For each channel c, cols_ch[c] is a Matrix of shape (k2, H_out*W_out). Every column is one pooling window and the k2 rows are the elements inside that window.
+    ## This is needed to vectorize the max operation over each window
     cols_ch = cols.reshape(C, k2, H_out * W_out)
 
+    ## Now we can compute the max over each window (aka column because we vectorized the windows)
     max_vals = cols_ch.max(axis=1)
+    ## And we store which index corresponds to the max value inside each window for backward pass
     max_idx = cols_ch.argmax(axis=1)
 
+    ## Finally we reshape the max values into the output feature map
     out = max_vals.reshape(C, H_out, W_out)
 
     cache = {
