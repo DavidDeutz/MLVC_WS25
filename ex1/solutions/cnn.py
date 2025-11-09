@@ -194,14 +194,20 @@ def _conv2d_forward(x, W, b, stride=1, pad=0):
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
     ## First we pad the input and turn it into columns
     xp, pad_cfg = _pad2d(x, pad)
+
+    ## Now we extract sliding local blocks into columns
     cols, idx, H_out, W_out = _im2col_from_padded(xp, k, stride)
 
-    ## Now we reshape the filters and compute the convolution 
+    ## Now we reshape the filters into single row vectors, so that all filters form a matrix that can be used for multiplication
     W_row = W.reshape(C_out, C_in * k * k)
+
+    ## Now we can perform the convolution as a matrix multiplication with bias addition
     out_cols = W_row @ cols + b.reshape(-1, 1)
 
+    ## Finally we reshape the output columns into the output feature map or tensor
     out = out_cols.reshape(C_out, H_out, W_out)
 
+    ## And cache everything needed for backward pass
     cache = {
         "x_shape": x.shape,
         "W": W,
