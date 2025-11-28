@@ -78,7 +78,29 @@ class GaussianProcess:
         n = X.shape[0]
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        
+        # Store the training data for later use in prediction
+        self.X_train_ = X
+        self.y_train_ = y
+
+        # Build the kernel Gram matrix K(X, X)
+        # It takes two matrices and computes similarity between all pairs
+        K = self.kernel(self.X_train_, self.X_train_)
+
+        # Add noise variance to the diagonal for numerical stability
+        # We use np.eye to create an identity matrix of size n
+        K = K + np.eye(n) * self.noise_variance
+
+        # Compute Cholesky factorization K = L L^T
+        # This is strictly required for the predictable stability of the solution
+        self.L_ = cholesky(K)
+
+        # Solve for alpha = K^{-1} y
+        # 1: Solve L * z = y
+        # 2: Solve L^T * alpha = z
+        # In numpy, we can chain the solve calls:
+        self.alpha_ = solve(self.L_.T, solve(self.L_, self.y_train_))
+        
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return self
@@ -116,7 +138,27 @@ class GaussianProcess:
         X = np.asarray(X, dtype=np.float64)
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        
+        # Compute kernel cross-covariance K(X_train, X_test)
+        # Shape will be (n_train_samples, n_test_samples)
+        K_trans = self.kernel(self.X_train_, X)
+
+        # mean = K_trans^T * alpha
+        # We simply do a dot product
+        mean = K_trans.T @ self.alpha_
+
+        # We need to calculate: v = L^{-1} K_trans
+        # Again, we use 'solve' with the lower triangular matrix L
+        v = solve(self.L_, K_trans)
+
+        # Compute k(x*, x*) for each test point (prior variance)
+        # We only need the diagonal elements (variance of each point with itself)
+        # Usually, self.kernel(X, X) returns a matrix. We extract the diagonal
+        y_var = np.diag(self.kernel(X, X)) - np.sum(v**2, axis=0)
+
+        # Standard deviation is the square root of variance
+        std = np.sqrt(y_var)
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return mean, std
