@@ -40,7 +40,13 @@ class LinearRegression:
         X = np.asarray(X, dtype=np.float64)
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        ## Ensuring X is 2D
+        if X.ndim == 1: 
+            X = X.reshape(-1,1)
+
+        # Create column of ones with the same number of rows as X
+        ones = np.ones((X.shape[0], 1))
+        
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return np.hstack([ones, X])
