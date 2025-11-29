@@ -86,13 +86,13 @@ class LinearRegression:
         ## Solve least squares
         self.w = np.linalg.lstsq(Xb, y, rcond=None)[0]
 
-        ##Sotre number of features without bias
+        ## Store number of features without bias
         X = np.asarray(X)
 
         if X.ndim == 1:
             X= X.reshape(-1, 1)
         self.n_features_ = X.shape[1]
-        
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return self
@@ -120,7 +120,17 @@ class LinearRegression:
         """
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        ## Check if model has been fitted 
+        if self.w is None:
+            raise ValueError("Model has not been fitted yet. Call fit() first.")
+        
+        ## Add bias column
+        Xb = self._add_bias(X)
+
+        ## Check feature dimensions match training data
+        if Xb.shape[1] - 1 != self.n_features_:
+            raise ValueError(f"X has {Xb.shape[1] - 1} features, but model was trained with {self.n_features_} features")
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return Xb @ self.w
