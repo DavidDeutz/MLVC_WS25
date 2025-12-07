@@ -9,6 +9,7 @@ import numpy as np
 # Do not change any other code
 #############################
 
+
 class EpsilonSVR:
     """
     ε-Support Vector Regression (dual form).
@@ -46,18 +47,20 @@ class EpsilonSVR:
 
     def __init__(self, C=1.0, epsilon=0.1, kernel=None, normalize=True):
         if kernel is None:
-            raise ValueError("Provide an sklearn-compatible kernel instance (callable K(X, Y)).")
+            raise ValueError(
+                "Provide an sklearn-compatible kernel instance (callable K(X, Y))."
+            )
         self.C = float(C)
         self.epsilon = float(epsilon)
         self.__sk_kernel = kernel
         self.__normalize = bool(normalize)
 
         # Learned params
-        self.__a = None             # a
-        self.__a_star = None        # a*
-        self.__coef = None          # (a - a*)
+        self.__a = None  # a
+        self.__a_star = None  # a*
+        self.__coef = None  # (a - a*)
         self.__bias = 0.0
-        self.__training_X = None    # numpy, scaled if normalize=True
+        self.__training_X = None  # numpy, scaled if normalize=True
         self.__norm = 1.0
         self.__support_mask = None  # boolean mask over training samples
 
@@ -95,9 +98,63 @@ class EpsilonSVR:
         n, _ = X.shape
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+
+        # normalize
+        X_cpy = X.copy()
+        if self.__normalize:
+            self.__norm = np.max(np.linalg.norm(X, axis=1))
+            X_cpy = X_cpy / self.__norm
+
+        # Gram matrix
+        gram_matrix = self._kernel(X_cpy, X_cpy)
+
+        # Variables for cvxopt
+        P = np.vstack(
+            [
+                np.hstack([gram_matrix, -gram_matrix]),
+                np.hstack([-gram_matrix, gram_matrix]),
+            ]
+        )
+        q = np.hstack([self.epsilon * np.ones(n) - y, self.epsilon * np.ones(n) + y])
+        G = np.vstack([-np.eye(2 * n), np.eye(2 * n)])
+        h = np.hstack([np.zeros(2 * n), self.C * np.ones(2 * n)])
+        A = np.hstack([np.ones(n), -np.ones(n)])
+
+        P = cvxopt.matrix(P)
+        q = cvxopt.matrix(q)
+        G = cvxopt.matrix(G)
+        h = cvxopt.matrix(h)
+        A = cvxopt.matrix(A, (1, 2 * n))
+        b = cvxopt.matrix(0.0)
+
+        # Solve for alpha, alpha*
+        sol = cvxopt.solvers.qp(P, q, G, h, A, b)
+
+        self.__a = np.array(sol["x"][:n])  # first n entries are a
+        self.__a_star = np.array(sol["x"][n:])  # second n entries are a*
+        self.__coef = self.__a - self.__a_star
+        self.__training_X = X_cpy.copy()
+        self.__support_mask = (
+            np.abs(self.__coef) > 0
+        )  # coefficients over tolerance are support vectors
+
+        f_without_bias = gram_matrix.dot(self.__coef)
+        candidates = []
+
+        # 0 < a < C --> b = y_i - f(x_i) - epsilon
+        in_range_a = np.where((self.__a > 0) & (self.__a < self.C))
+        for i in in_range_a:
+            candidates.append(y[i] - f_without_bias[i] - self.epsilon)
+
+        # 0 < a* < C --> b = y_i - f(x_i) + epsilon
+        in_range_a_star = np.where((self.__a_star > 0) & (self.__a_star < self.C))
+        for i in in_range_a_star:
+            candidates.append(y[i] - f_without_bias[i] + self.epsilon)
+
+        self.__bias = float(np.mean(candidates))
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        
+
         return self
 
     def _k_train_test(self, Xtest_scaled):
@@ -128,9 +185,22 @@ class EpsilonSVR:
         X = np.asarray(X, dtype=np.float64)
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        X_cpy = X.copy()
+        if self.__normalize:
+            X_cpy = X / self.__norm
+
+        # extract support vectors
+        sv = self.__training_X[self.__support_mask]
+        sv_coef = self.__coef[self.__support_mask]
+
+        sv = sv.reshape(-1, 1)
+        print(f"Dimensions of support vectors: {sv.shape}")
+        print(f"Dimensions of X_test: {X_cpy.shape}")
+
+        kernel_res = self._kernel(sv, X_cpy)
+
+        print(f"Dimensions of 'kernel_res': {kernel_res.shape}")
+        y_pred = sv_coef @ kernel_res + self.__bias
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return y_pred
-    
-
