@@ -60,7 +60,17 @@ class MultiHeadSelfAttention(nn.Module):
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_head = d_model // num_heads
+
+        # Linear projections for Q, K, V (all from d_model to d_model)
+        self.q_proj = nn.Linear(d_model, d_model, bias=True)
+        self.k_proj = nn.Linear(d_model, d_model, bias=True)
+        self.v_proj = nn.Linear(d_model, d_model, bias=True)
+
+        # Final projection after concatenating heads
+        self.out_proj = nn.Linear(d_model, d_model, bias=True)
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         self.last_attn = None  # (B, H, S, S)
@@ -108,7 +118,35 @@ class MultiHeadSelfAttention(nn.Module):
         assert D == self.d_model
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        # 1) Project inputs to Q, K, V
+        q = self.q_proj(x)  # (B, S, D)
+        k = self.k_proj(x)  # (B, S, D)
+        v = self.v_proj(x)  # (B, S, D)
+
+        # 2) Split into heads: (B, S, H, d_head) and move heads forward -> (B, H, S, d_head)
+        H = self.num_heads
+        dh = self.d_head
+
+        q = q.view(B, S, H, dh).transpose(1, 2)  # (B, H, S, dh)
+        k = k.view(B, S, H, dh).transpose(1, 2)  # (B, H, S, dh)
+        v = v.view(B, S, H, dh).transpose(1, 2)  # (B, H, S, dh)
+
+        # 3) Scaled dot-product attention
+        # scores: (B, H, S, S)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(dh)
+        attn = F.softmax(scores, dim=-1)  # softmax over keys dimension
+
+        # store attention weights for visualization
+        self.last_attn = attn
+
+        # 4) Apply attention weights to values -> context: (B, H, S, dh)
+        context = torch.matmul(attn, v)
+
+        # 5) Concatenate heads back: (B, S, D)
+        context = context.transpose(1, 2).contiguous().view(B, S, D)
+
+        # 6) Final linear projection
+        out = self.out_proj(context)
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return out
