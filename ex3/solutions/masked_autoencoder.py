@@ -1,22 +1,25 @@
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from solutions.vision_transformer import PositionalEncoding, ViTBlock, MultiHeadSelfAttention, PatchEmbed
+
+from solutions.vision_transformer import PatchEmbed, PositionalEncoding, ViTBlock
 
 ########### TO-DO ###########
 # Implement the methods marked with "BEGINNING OF YOUR CODE" and "END OF YOUR CODE":
-# patchify(), unpatchify(), 
+# patchify(), unpatchify(),
 # random_mask_indices(), block_mask_indices(), grid_mask_indices()
 # reconstruction_loss()
 # Do not change the function signatures
 # Do not change any other code
 #############################
 
+
 def assert_shape(x, shape, msg_prefix=""):
     if isinstance(shape, int):
         shape = (shape,)
-    assert len(x.shape) == len(shape), f"{msg_prefix} rank mismatch: got {tuple(x.shape)} expected rank {len(shape)}"
+    assert len(x.shape) == len(
+        shape
+    ), f"{msg_prefix} rank mismatch: got {tuple(x.shape)} expected rank {len(shape)}"
     for i, (a, b) in enumerate(zip(x.shape, shape)):
         if b != -1:
             assert a == b, f"{msg_prefix} dim {i} mismatch: got {a} expected {b}"
@@ -51,8 +54,18 @@ def patchify(images: torch.Tensor, patch_size: int) -> torch.Tensor:
     assert C == 1 and H == 16 and W == 16
     assert patch_size in (4, 8)
 
-    # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)****
+    N = (16 // patch_size) ** 2
+    P = patch_size * patch_size
+
+    # reshape into patches
+    patches = images.reshape(
+        B, C, 16 // patch_size, patch_size, 16 // patch_size, patch_size
+    )
+    patches = patches.permute(0, 2, 4, 1, 3, 5)
+    patches = patches.reshape(B, N, P)
+
+    assert patches.shape == (B, N, P)
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return patches
@@ -88,7 +101,14 @@ def unpatchify(patches: torch.Tensor, patch_size: int) -> torch.Tensor:
     assert P == patch_size * patch_size
 
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    # do the inverse operations of patchify
+    x = patches.reshape(
+        B, 16 // patch_size, 16 // patch_size, 1, patch_size, patch_size
+    )
+    x = x.permute(0, 3, 1, 4, 2, 5)
+    x = x.reshape(B, 1, 16, 16)
+
+    assert x.shape == (B, 1, 16, 16)
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     return x
@@ -121,12 +141,17 @@ def random_mask_indices(num_patches: int, mask_ratio: float) -> torch.Tensor:
         mask:     T  F  T  F  F  F  T  F
     """
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    k = round(num_patches * mask_ratio)
+    indices = torch.randperm(num_patches)
+    mask = torch.zeros(num_patches, dtype=torch.bool)
+    mask[indices[:k]] = True
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
     return mask
 
 
-def block_mask_indices(grid_h: int, grid_w: int, block_h: int, block_w: int) -> torch.Tensor:
+def block_mask_indices(
+    grid_h: int, grid_w: int, block_h: int, block_w: int
+) -> torch.Tensor:
     """
     Create a block mask over a 2D patch grid.
 
@@ -161,12 +186,20 @@ def block_mask_indices(grid_h: int, grid_w: int, block_h: int, block_w: int) -> 
     """
     assert 1 <= block_h <= grid_h and 1 <= block_w <= grid_w
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    top = torch.randint(0, grid_h - block_h + 1, (1,)).item()
+    left = torch.randint(0, grid_w - block_w + 1, (1,)).item()
+    mask_2d = torch.zeros((grid_h, grid_w), dtype=torch.bool)
+    mask_2d[top : top + block_h, left : left + block_w] = True
+    mask = mask_2d.flatten()
+
+    assert mask.shape == (grid_h * grid_w,)
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
     return mask
 
 
-def grid_mask_indices(grid_h: int, grid_w: int, step_h: int, step_w: int) -> torch.Tensor:
+def grid_mask_indices(
+    grid_h: int, grid_w: int, step_h: int, step_w: int
+) -> torch.Tensor:
     """
     Create a grid-like sampling mask.
 
@@ -201,7 +234,11 @@ def grid_mask_indices(grid_h: int, grid_w: int, step_h: int, step_w: int) -> tor
     """
     assert step_h >= 1 and step_w >= 1
     # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-    raise NotImplementedError("Provide your solution here")
+    mask = torch.zeros((grid_h, grid_w), dtype=torch.bool)
+    mask[0::step_h, 0::step_w] = True
+    mask = mask.flatten()
+
+    assert mask.shape == (grid_h * grid_w,)
     # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
     return mask
 
@@ -210,6 +247,7 @@ class TinyMAE(nn.Module):
     """
     Minimal MAE for 16x16 grayscale images with masking strategies.
     """
+
     def __init__(
         self,
         d_model=64,
@@ -218,13 +256,13 @@ class TinyMAE(nn.Module):
         num_enc_blocks=2,
         num_dec_blocks=1,
         patch_size=4,
-        pos_emb="learnable",      # "learnable" or "sinusoidal"
-        masking="random",         # "random", "block", "grid"
+        pos_emb="learnable",  # "learnable" or "sinusoidal"
+        masking="random",  # "random", "block", "grid"
         mask_ratio=0.5,
         block_h=2,
         block_w=2,
         step_h=2,
-        step_w=2
+        step_w=2,
     ):
         super().__init__()
         assert patch_size in (4, 8)
@@ -241,29 +279,39 @@ class TinyMAE(nn.Module):
         self.step_h = int(step_h)
         self.step_w = int(step_w)
 
-        self.patch_embed = PatchEmbed(img_size=16, patch_size=patch_size, in_chans=1, embed_dim=d_model)
+        self.patch_embed = PatchEmbed(
+            img_size=16, patch_size=patch_size, in_chans=1, embed_dim=d_model
+        )
         self.grid_h = self.patch_embed.grid_h
         self.grid_w = self.patch_embed.grid_w
         self.N = self.patch_embed.num_patches
         self.P = patch_size * patch_size
 
-        self.enc_pos = PositionalEncoding(seq_len=self.N, d_model=d_model, learnable=(pos_emb == "learnable"))
-        self.dec_pos = PositionalEncoding(seq_len=self.N, d_model=d_model, learnable=(pos_emb == "learnable"))
+        self.enc_pos = PositionalEncoding(
+            seq_len=self.N, d_model=d_model, learnable=(pos_emb == "learnable")
+        )
+        self.dec_pos = PositionalEncoding(
+            seq_len=self.N, d_model=d_model, learnable=(pos_emb == "learnable")
+        )
 
-        self.encoder_blocks = nn.ModuleList([
-            ViTBlock(d_model=d_model, mlp_hidden=mlp_hidden, num_heads=num_heads)
-            for _ in range(num_enc_blocks)
-        ])
+        self.encoder_blocks = nn.ModuleList(
+            [
+                ViTBlock(d_model=d_model, mlp_hidden=mlp_hidden, num_heads=num_heads)
+                for _ in range(num_enc_blocks)
+            ]
+        )
         self.enc_norm = nn.LayerNorm(d_model)
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, d_model))
         nn.init.trunc_normal_(self.mask_token, std=0.02)
         self.enc_to_dec = nn.Identity()
 
-        self.decoder_blocks = nn.ModuleList([
-            ViTBlock(d_model=d_model, mlp_hidden=mlp_hidden, num_heads=num_heads)
-            for _ in range(num_dec_blocks)
-        ])
+        self.decoder_blocks = nn.ModuleList(
+            [
+                ViTBlock(d_model=d_model, mlp_hidden=mlp_hidden, num_heads=num_heads)
+                for _ in range(num_dec_blocks)
+            ]
+        )
         self.dec_norm = nn.LayerNorm(d_model)
         self.pred = nn.Linear(d_model, self.P)
 
@@ -276,14 +324,20 @@ class TinyMAE(nn.Module):
             if self.masking == "random":
                 m = random_mask_indices(self.N, self.mask_ratio)
             elif self.masking == "block":
-                m = block_mask_indices(self.grid_h, self.grid_w, self.block_h, self.block_w)
+                m = block_mask_indices(
+                    self.grid_h, self.grid_w, self.block_h, self.block_w
+                )
             else:
-                m = grid_mask_indices(self.grid_h, self.grid_w, self.step_h, self.step_w)
+                m = grid_mask_indices(
+                    self.grid_h, self.grid_w, self.step_h, self.step_w
+                )
             masks.append(m)
         mask = torch.stack(masks, dim=0).to(device)
         num_masked = mask.sum(dim=1)
         assert torch.all(num_masked > 0), "At least one patch must be masked per sample"
-        assert torch.all(num_masked < self.N), "At least one patch must remain visible per sample"
+        assert torch.all(
+            num_masked < self.N
+        ), "At least one patch must remain visible per sample"
         return mask
 
     def forward(self, images: torch.Tensor):
@@ -297,10 +351,10 @@ class TinyMAE(nn.Module):
         device = images.device
         B = images.size(0)
 
-        tokens = self.patch_embed(images)                     # (B, N, D)
+        tokens = self.patch_embed(images)  # (B, N, D)
 
-        mask = self._make_mask_batch(B, device)              # (B, N) True=masked
-        tokens_pos = self.enc_pos(tokens)                    # (B, N, D)
+        mask = self._make_mask_batch(B, device)  # (B, N) True=masked
+        tokens_pos = self.enc_pos(tokens)  # (B, N, D)
 
         S_vis = (~mask[0]).sum().item()
         x_vis = torch.empty(B, S_vis, self.d_model, device=device)
@@ -314,21 +368,21 @@ class TinyMAE(nn.Module):
         for blk in self.encoder_blocks:
             h = blk(h)
             self.last_enc_attn = blk.attn.last_attn
-        h = self.enc_norm(h)                                  # (B, S_vis, D)
+        h = self.enc_norm(h)  # (B, S_vis, D)
 
         dec_input = self.mask_token.expand(B, self.N, self.d_model).clone()
         for i in range(B):
             dec_input[i, keep_indices[i], :] = self.enc_to_dec(h[i])
 
-        dec_input = self.dec_pos(dec_input)                   # (B, N, D)
+        dec_input = self.dec_pos(dec_input)  # (B, N, D)
 
         z = dec_input
         for blk in self.decoder_blocks:
             z = blk(z)
             self.last_dec_attn = blk.attn.last_attn
-        z = self.dec_norm(z)                                  # (B, N, D)
+        z = self.dec_norm(z)  # (B, N, D)
 
-        recon = self.pred(z)                                  # (B, N, P)
+        recon = self.pred(z)  # (B, N, P)
         assert_shape(recon, (B, self.N, self.P), "recon")
         return recon, mask
 
@@ -355,7 +409,9 @@ class TinyMAE(nn.Module):
         """
         return unpatchify(recon, self.patch_size)
 
-    def reconstruction_loss(self, images: torch.Tensor, recon: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    def reconstruction_loss(
+        self, images: torch.Tensor, recon: torch.Tensor, mask: torch.Tensor
+    ) -> torch.Tensor:
         """
         Compute mean squared error loss on masked patches only.
 
@@ -381,12 +437,18 @@ class TinyMAE(nn.Module):
         * Normalize by total number of masked pixels (avoid div-by-zero).
         """
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+        target = patchify(images, self.patch_size)
+        sq_error = (recon - target) ** 2
+        sq_error = sq_error * mask.unsqueeze(-1)
+        num_masked_pixels = mask.sum() * self.P
+        loss = sq_error.sum() / num_masked_pixels
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
         return loss
 
     @torch.no_grad()
-    def mae_encode_features(self, images: torch.Tensor, device="cpu", pool="mean") -> torch.Tensor:
+    def mae_encode_features(
+        self, images: torch.Tensor, device="cpu", pool="mean"
+    ) -> torch.Tensor:
         """
         Extract a single D-dim feature per image from the encoder.
         Uses a fresh random mask per batch call.
