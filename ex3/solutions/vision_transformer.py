@@ -121,11 +121,10 @@ class PatchEmbed(nn.Module):
         self.num_patches = self.grid_h * self.grid_w
 
         # Create Conv2d projection layer:
-        # - kernel_size = patch_size: each kernel covers exactly one patch
-        # - stride = patch_size: non-overlapping patches (no overlap between windows)
-        # - in_channels = in_chans (1 for grayscale, 3 for RGB)
-        # - out_channels = embed_dim: each patch projected to D-dimensional embedding
-        # This is equivalent to: flatten patch pixels → linear projection
+        # kernel_size = patch_size: each kernel covers exactly one patch
+        # stride = patch_size: non-overlapping patches (no overlap between windows)
+        # in_channels = in_chans (1 for grayscale, 3 for RGB)
+        # out_channels = embed_dim: each patch projected to D-dimensional embedding
         self.proj = nn.Conv2d(
             in_channels=in_chans,
             out_channels=embed_dim,
@@ -216,11 +215,10 @@ class PositionalEncoding(nn.Module):
 
         if learnable:
             # Learnable positional embeddings: a trainable parameter
-            # Shape (1, seq_len, d_model) - the 1 is for broadcasting over batch dimension
             # nn.Parameter makes it a learnable parameter that gets updated during training
             self.pe = nn.Parameter(torch.randn(1, seq_len, d_model))
         else:
-            # Sinusoidal positional encoding (from "Attention is All You Need")
+            # Sinusoidal positional encoding
             # This is a fixed, deterministic encoding - not learned
 
             # Create position indices: [0, 1, 2, ..., seq_len-1], shape (seq_len, 1)
@@ -228,7 +226,6 @@ class PositionalEncoding(nn.Module):
 
             # Create dimension indices for the encoding formula
             # div_term = 10000^(2i/d_model) for i = 0, 1, 2, ..., d_model/2
-            # We compute this as exp(2i * -log(10000)/d_model) for numerical stability
             div_term = torch.exp(
                 torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
             )
@@ -242,10 +239,10 @@ class PositionalEncoding(nn.Module):
             # Apply cos to odd indices: PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
             pe[:, 1::2] = torch.cos(position * div_term)
 
-            # Add batch dimension: (seq_len, d_model) → (1, seq_len, d_model)
+            # Add batch dimension: (seq_len, d_model) to (1, seq_len, d_model)
             pe = pe.unsqueeze(0)
 
-            # Register as buffer (not a parameter) - saved with model but not trained
+            # Register as non-trainable buffer saved with model but not trained
             self.register_buffer('pe', pe)
 
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
@@ -276,7 +273,6 @@ class PositionalEncoding(nn.Module):
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         # Simply add positional encodings to input embeddings
-        # self.pe has shape (1, S, D) which broadcasts over batch dimension B
         # This injects position information into each token embedding
         x_pos = x + self.pe
 
@@ -466,16 +462,9 @@ class ViTClassifier(nn.Module):
             # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
             # Expand CLS token to match batch size
-            # self.cls_token has shape (1, 1, D)
-            # expand(-1, ...) keeps the dimension, expand(B, ...) replicates B times
-            # Result: (B, 1, D) - one CLS token per sample in the batch
             cls_tokens = self.cls_token.expand(B, -1, -1)
 
             # Prepend CLS token to the sequence of patch tokens
-            # tokens: (B, S, D) where S = num_patches
-            # cls_tokens: (B, 1, D)
-            # Result: (B, S+1, D) = (B, 1+num_patches, D)
-            # The CLS token is at position 0, patches at positions 1, 2, ..., S
             tokens = torch.cat([cls_tokens, tokens], dim=1)
 
             # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
@@ -492,10 +481,6 @@ class ViTClassifier(nn.Module):
             # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
             # Extract the CLS token's final representation for classification
-            # h has shape (B, S+1, D) where position 0 is the CLS token
-            # h[:, 0] selects the first token (CLS) for all samples in batch
-            # Result: (B, D) - one D-dimensional vector per sample
-            # This CLS token has aggregated information from all patches via attention
             pooled = h[:, 0]
 
             # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
