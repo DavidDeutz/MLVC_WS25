@@ -112,18 +112,16 @@ class PatchEmbed(nn.Module):
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         # Calculate how many patches fit along each axis (height and width)
-        # For a 16x16 image with patch_size=4: grid_h = grid_w = 16/4 = 4
         self.grid_h = self.img_size // self.patch_size
         self.grid_w = self.img_size // self.patch_size
 
         # Total number of patches = grid_h * grid_w
-        # For our example: 4 * 4 = 16 patches (tokens)
         self.num_patches = self.grid_h * self.grid_w
 
         # Create Conv2d projection layer:
         # kernel_size = patch_size: each kernel covers exactly one patch
         # stride = patch_size: non-overlapping patches (no overlap between windows)
-        # in_channels = in_chans (1 for grayscale, 3 for RGB)
+        # in_channels = in_chans (1 for grayscale)
         # out_channels = embed_dim: each patch projected to D-dimensional embedding
         self.proj = nn.Conv2d(
             in_channels=in_chans,
@@ -159,18 +157,13 @@ class PatchEmbed(nn.Module):
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
-        # Step 1: Apply Conv2d projection
-        # Input: (B, C, H, W) e.g., (B, 1, 16, 16)
-        # Output: (B, D, H', W') e.g., (B, 64, 4, 4) where H'=H/P, W'=W/P
+        # Apply Conv2d projection
         x = self.proj(x)
 
         # Step 2: Flatten the spatial dimensions (H' and W') into a single sequence dimension
-        # (B, D, H', W') → (B, D, H'*W') = (B, D, N) where N is number of patches
-        # flatten(2) flattens starting from dimension 2 onwards
         x = x.flatten(2)
 
         # Step 3: Transpose to get (B, N, D) - the standard sequence format for transformers
-        # Transformers expect: (batch, sequence_length, embedding_dim)
         x = x.transpose(1, 2)
 
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
@@ -370,10 +363,6 @@ class ViTClassifier(nn.Module):
             # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
             # Create learnable [CLS] token: shape (1, 1, D)
-            # - First 1: for broadcasting over batch dimension
-            # - Second 1: single token (the CLS token itself)
-            # - d_model: embedding dimension
-            # This token will be prepended to the sequence and used for classification
             self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
 
             # Update sequence length: original patches + 1 for the CLS token
