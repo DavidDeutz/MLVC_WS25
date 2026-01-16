@@ -110,7 +110,29 @@ class PatchEmbed(nn.Module):
         self.patch_size = int(patch_size)
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+
+        # Calculate how many patches fit along each axis (height and width)
+        # For a 16x16 image with patch_size=4: grid_h = grid_w = 16/4 = 4
+        self.grid_h = self.img_size // self.patch_size
+        self.grid_w = self.img_size // self.patch_size
+
+        # Total number of patches = grid_h * grid_w
+        # For our example: 4 * 4 = 16 patches (tokens)
+        self.num_patches = self.grid_h * self.grid_w
+
+        # Create Conv2d projection layer:
+        # - kernel_size = patch_size: each kernel covers exactly one patch
+        # - stride = patch_size: non-overlapping patches (no overlap between windows)
+        # - in_channels = in_chans (1 for grayscale, 3 for RGB)
+        # - out_channels = embed_dim: each patch projected to D-dimensional embedding
+        # This is equivalent to: flatten patch pixels → linear projection
+        self.proj = nn.Conv2d(
+            in_channels=in_chans,
+            out_channels=embed_dim,
+            kernel_size=patch_size,
+            stride=patch_size
+        )
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -137,7 +159,21 @@ class PatchEmbed(nn.Module):
         assert H == self.img_size and W == self.img_size
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+
+        # Step 1: Apply Conv2d projection
+        # Input: (B, C, H, W) e.g., (B, 1, 16, 16)
+        # Output: (B, D, H', W') e.g., (B, 64, 4, 4) where H'=H/P, W'=W/P
+        x = self.proj(x)
+
+        # Step 2: Flatten the spatial dimensions (H' and W') into a single sequence dimension
+        # (B, D, H', W') → (B, D, H'*W') = (B, D, N) where N is number of patches
+        # flatten(2) flattens starting from dimension 2 onwards
+        x = x.flatten(2)
+
+        # Step 3: Transpose to get (B, N, D) - the standard sequence format for transformers
+        # Transformers expect: (batch, sequence_length, embedding_dim)
+        x = x.transpose(1, 2)
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return x
@@ -177,7 +213,41 @@ class PositionalEncoding(nn.Module):
         self.d_model = d_model
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+
+        if learnable:
+            # Learnable positional embeddings: a trainable parameter
+            # Shape (1, seq_len, d_model) - the 1 is for broadcasting over batch dimension
+            # nn.Parameter makes it a learnable parameter that gets updated during training
+            self.pe = nn.Parameter(torch.randn(1, seq_len, d_model))
+        else:
+            # Sinusoidal positional encoding (from "Attention is All You Need")
+            # This is a fixed, deterministic encoding - not learned
+
+            # Create position indices: [0, 1, 2, ..., seq_len-1], shape (seq_len, 1)
+            position = torch.arange(seq_len).unsqueeze(1).float()
+
+            # Create dimension indices for the encoding formula
+            # div_term = 10000^(2i/d_model) for i = 0, 1, 2, ..., d_model/2
+            # We compute this as exp(2i * -log(10000)/d_model) for numerical stability
+            div_term = torch.exp(
+                torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
+            )
+
+            # Initialize PE matrix of shape (seq_len, d_model)
+            pe = torch.zeros(seq_len, d_model)
+
+            # Apply sin to even indices: PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
+            pe[:, 0::2] = torch.sin(position * div_term)
+
+            # Apply cos to odd indices: PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+            pe[:, 1::2] = torch.cos(position * div_term)
+
+            # Add batch dimension: (seq_len, d_model) → (1, seq_len, d_model)
+            pe = pe.unsqueeze(0)
+
+            # Register as buffer (not a parameter) - saved with model but not trained
+            self.register_buffer('pe', pe)
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -204,7 +274,12 @@ class PositionalEncoding(nn.Module):
         assert S == self.seq_len and D == self.d_model
 
         # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-        raise NotImplementedError("Provide your solution here")
+
+        # Simply add positional encodings to input embeddings
+        # self.pe has shape (1, S, D) which broadcasts over batch dimension B
+        # This injects position information into each token embedding
+        x_pos = x + self.pe
+
         # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         return x_pos
@@ -297,7 +372,17 @@ class ViTClassifier(nn.Module):
 
         if use_cls_token:
             # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-            raise NotImplementedError("Provide your solution here")
+
+            # Create learnable [CLS] token: shape (1, 1, D)
+            # - First 1: for broadcasting over batch dimension
+            # - Second 1: single token (the CLS token itself)
+            # - d_model: embedding dimension
+            # This token will be prepended to the sequence and used for classification
+            self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
+
+            # Update sequence length: original patches + 1 for the CLS token
+            seq_len = base_len + 1
+
             # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
         else:
             self.cls_token = None
@@ -379,7 +464,20 @@ class ViTClassifier(nn.Module):
 
         if self.use_cls_token:
             # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-            raise NotImplementedError("Provide your solution here")
+
+            # Expand CLS token to match batch size
+            # self.cls_token has shape (1, 1, D)
+            # expand(-1, ...) keeps the dimension, expand(B, ...) replicates B times
+            # Result: (B, 1, D) - one CLS token per sample in the batch
+            cls_tokens = self.cls_token.expand(B, -1, -1)
+
+            # Prepend CLS token to the sequence of patch tokens
+            # tokens: (B, S, D) where S = num_patches
+            # cls_tokens: (B, 1, D)
+            # Result: (B, S+1, D) = (B, 1+num_patches, D)
+            # The CLS token is at position 0, patches at positions 1, 2, ..., S
+            tokens = torch.cat([cls_tokens, tokens], dim=1)
+
             # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
 
         h = tokens if self.pos_enc is None else self.pos_enc(tokens)
@@ -392,7 +490,14 @@ class ViTClassifier(nn.Module):
 
         if self.use_cls_token:
             # *****BEGINNING OF YOUR CODE (DO NOT DELETE THIS LINE)*****
-            raise NotImplementedError("Provide your solution here")
+
+            # Extract the CLS token's final representation for classification
+            # h has shape (B, S+1, D) where position 0 is the CLS token
+            # h[:, 0] selects the first token (CLS) for all samples in batch
+            # Result: (B, D) - one D-dimensional vector per sample
+            # This CLS token has aggregated information from all patches via attention
+            pooled = h[:, 0]
+
             # *****END OF YOUR CODE (DO NOT DELETE THIS LINE)*****
         else:
             pooled = h.mean(dim=1)
